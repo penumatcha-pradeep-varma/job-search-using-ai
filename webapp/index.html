@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Job Search</title>
+<style>
+  /* Look and layout follow ../job_search (topbar, pipeline flow, agent cards, job list + detail). */
+  :root { color-scheme: light; --ink: #1e293b; --muted: #64748b; --line: #e2e8f0; --paper: #fff; --canvas: #f4f7fb;
+          --blue: #175cd3; --blue-soft: #eff6ff; --green: #07805b; --red: #b42318; --amber: #b54708; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  button, input, select, textarea { font: inherit; }
+  h1, h2, h3, p { margin-top: 0; }
+  h1 { margin-bottom: 0; font-size: 23px; letter-spacing: -.03em; }
+  h2 { font-size: 21px; margin: 0; letter-spacing: -.03em; }
+  h3 { font-size: 15px; margin-bottom: 10px; }
+  .topbar { background: var(--paper); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; padding: 18px max(24px, calc((100vw - 1280px) / 2)); }
+  .eyebrow { color: var(--blue); font-size: 10px; font-weight: 800; letter-spacing: .13em; margin: 0 0 4px; }
+  main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 60px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; background: var(--paper); padding: 17px; }
+  .section-heading, .card-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+  .card-heading h3 { margin: 0; }
+  .pill { border: 1px solid var(--line); border-radius: 100px; padding: 5px 10px; color: var(--muted); background: #fff; font-size: 12px; }
+  .pill.good { color: var(--green); border-color: #a7f3d0; background: #ecfdf5; }
+  .pill.bad { color: var(--red); border-color: #fecdca; background: #fef3f2; }
+  .pill.busy { color: var(--blue); border-color: #bfdbfe; background: var(--blue-soft); }
+  .button { border: 1px solid transparent; padding: 9px 13px; border-radius: 7px; font-weight: 650; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  .button-primary { background: var(--blue); color: #fff; }
+  .button-primary:hover { background: #1247a8; }
+  .button-secondary { border-color: var(--line); background: #fff; color: var(--ink); }
+  .button-secondary:hover { border-color: #94a3b8; }
+  .button:disabled { cursor: not-allowed; opacity: .48; }
+  .button:focus-visible, input:focus, textarea:focus, .job-card:focus-visible { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px #dbeafe; }
+  label { display: grid; gap: 5px; font-size: 12px; color: #475569; font-weight: 650; }
+  input, textarea { min-width: 0; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: var(--ink); padding: 9px 10px; }
+  textarea { width: 100%; resize: vertical; }
+  .actions, .inline-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .muted, .helper { color: var(--muted); font-size: 12px; }
+  .helper { margin: 0; }
+  .notice { border-left: 3px solid #60a5fa; background: var(--blue-soft); color: #334155; padding: 11px 14px; margin: 16px 0; font-size: 12px; }
+  .notice.warn { border-color: #f59e0b; background: #fffbeb; }
+  .error-text { color: var(--red); font-weight: 650; }
+  code { background: #eaf0f6; border-radius: 4px; padding: 2px 4px; }
+  [hidden] { display: none !important; }
+
+  /* Pipeline flow */
+  .pipeline-card { margin-bottom: 18px; display: grid; gap: 12px; }
+  .pipeline-flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; }
+  .flow-step { position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 11px; background: #f8fafc; font-size: 12px; }
+  .flow-step:not(:last-child)::after { content: "→"; position: absolute; right: -20px; top: 14px; color: #94a3b8; font-weight: 800; font-size: 15px; }
+  .flow-step.done { background: #ecfdf5; border-color: #a7f3d0; }
+  .flow-step.done:not(:last-child)::after { color: var(--green); }
+  .flow-step.active { background: var(--blue-soft); border-color: var(--blue); box-shadow: 0 0 0 3px #dbeafe; }
+  .flow-step.failed { background: #fef3f2; border-color: #fecdca; }
+  .flow-head { display: flex; align-items: center; gap: 6px; }
+  .flow-number { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--blue); color: #fff; font-size: 11px; font-weight: 800; }
+  .flow-step.done .flow-number { background: var(--green); }
+  .flow-state { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 650; }
+  .flow-io { margin: 6px 0 0; }
+  .flow-io span { display: inline-block; min-width: 32px; font-size: 10px; font-weight: 800; color: var(--blue); letter-spacing: .06em; }
+
+  /* Agent cards with progress */
+  .agent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .agent-card { display: grid; align-content: start; gap: 10px; }
+  .agent-card p { margin: 0; }
+  .stage-status { margin-left: 6px; color: var(--muted); font-size: 11px; font-weight: 650; }
+  .stage-status.running { color: var(--blue); }
+  .stage-status.complete { color: var(--green); }
+  .stage-status.failed { color: var(--red); }
+  .progress { display: grid; gap: 5px; }
+  .progress-top { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--muted); }
+  .progress-top b { color: var(--ink); }
+  .track { height: 10px; background: #eef2f7; border-radius: 100px; overflow: hidden; }
+  .track i { display: block; height: 100%; width: 0; background: var(--blue); border-radius: 100px; transition: width .6s ease; }
+  .track.done i { background: var(--green); }
+  .track.failed i { background: var(--red); }
+  .track.running i { background-image: linear-gradient(45deg, rgba(255,255,255,.25) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.25) 50%, rgba(255,255,255,.25) 75%, transparent 75%); background-size: 16px 16px; animation: stripes 1s linear infinite; }
+  @keyframes stripes { to { background-position: 16px 0; } }
+  @media (prefers-reduced-motion: reduce) { .track i { transition: none; } .track.running i { animation: none; } }
+  .file-drop { border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; text-align: center; cursor: pointer; background: #f8fafc; font-weight: 600; color: var(--blue); }
+  .file-drop.over { border-color: var(--blue); background: var(--blue-soft); }
+  .file-drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+
+  /* Jobs */
+  .agent-stage { margin-top: 28px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .stat .n { font-size: 22px; font-weight: 800; line-height: 1.1; }
+  .jobs-layout { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(420px, 1.2fr); gap: 16px; align-items: start; }
+  .job-list { display: grid; gap: 9px; max-height: 76vh; overflow-y: auto; padding-right: 4px; }
+  .job-card { text-align: left; width: 100%; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 13px; color: var(--ink); display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+  .job-card:hover, .job-card.selected { border-color: var(--blue); box-shadow: 0 0 0 2px #dbeafe; }
+  .job-card-body { display: grid; gap: 3px; min-width: 0; }
+  .job-card-title { font-weight: 700; line-height: 1.3; }
+  .job-card-company { color: #475569; font-size: 12px; }
+  .job-card-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 3px; }
+  .score-badge { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 15px; }
+  .score-high { background: #dcfce7; color: #166534; }
+  .score-mid { background: #fef3c7; color: #92400e; }
+  .score-low { background: #fee2e2; color: #991b1b; }
+  .portal-badge { display: inline-block; border-radius: 5px; padding: 1px 7px; font-size: 11px; font-weight: 700; border: 1px solid transparent; }
+  .portal-linkedin { background: #e8f1fb; color: #0a66c2; border-color: #c7dcf4; }
+  .portal-web { background: #ecfdf5; color: #047857; border-color: #b7ebd5; }
+  .guard-ok { background: #ecfdf5; color: var(--green); border-color: #b7ebd5; }
+  .guard-warn { background: #fffbeb; color: var(--amber); border-color: #fde68a; }
+  .guard-na { background: #f8fafc; color: var(--muted); border-color: var(--line); }
+  .job-detail { position: sticky; top: 16px; max-height: 80vh; overflow: auto; }
+  .detail-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+  .detail-head h3 { margin: 6px 0 2px; font-size: 18px; }
+  .score-ring { flex: 0 0 auto; width: 78px; height: 78px; border-radius: 50%; display: grid; place-content: center; text-align: center; }
+  .score-ring strong { font-size: 24px; line-height: 1; }
+  .score-ring span { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .job-detail h4 { font-size: 12px; margin: 14px 0 6px; color: #475569; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .skill-chip { border-radius: 100px; padding: 3px 10px; font-size: 12px; font-weight: 600; background: #f8fafc; border: 1px solid var(--line); }
+  .skill-chip.matched { background: #ecfdf5; color: var(--green); border-color: #b7ebd5; }
+  .skill-chip.missing { color: var(--muted); border: 1px dashed #cbd5e1; }
+  .skill-chip.gained { background: var(--blue-soft); color: var(--blue); border-color: #bfdbfe; }
+  .job-actions { display: flex; gap: 7px; margin: 14px 0 4px; flex-wrap: wrap; }
+
+  /* Tailor result */
+  .network-grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: 16px; align-items: start; }
+  .score-pair { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .score-pair .score-badge { width: 58px; height: 58px; font-size: 20px; }
+  .delta { font-weight: 800; font-size: 16px; }
+  .delta.up { color: var(--green); }
+  .delta.down { color: var(--red); }
+  .delta.same { color: var(--muted); }
+  .breakdown { display: grid; gap: 6px; margin: 4px 0 14px; }
+  .breakdown-row { display: grid; grid-template-columns: 90px 1fr 42px; align-items: center; gap: 10px; font-size: 12px; }
+  .breakdown-row .track { height: 8px; }
+  ul.changes { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+  ul.changes li { margin-bottom: 3px; }
+  #resume { min-height: 420px; font: 12.5px/1.5 ui-monospace, Menlo, monospace; }
+
+  @media (max-width: 1000px) {
+    .pipeline-flow, .agent-grid, .jobs-layout, .network-grid { grid-template-columns: 1fr; }
+    .flow-step:not(:last-child)::after { content: "↓"; right: auto; left: 18px; top: auto; bottom: -21px; }
+    .job-detail { position: static; max-height: none; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <p class="eyebrow">LOCAL JOB SEARCH WORKSPACE · RUNS ON YOUR CLAUDE CODE LOGIN</p>
+    <h1>AI Job Search</h1>
+  </div>
+  <span id="run-status" class="pill">Ready</span>
+</header>
+
+<main>
+  <article class="card pipeline-card">
+    <div class="card-heading">
+      <div><p class="eyebrow">PIPELINE · RESUME → JOBS → TAILORED RESUME</p><h3>Run all three agents</h3></div>
+      <button id="run-all" class="button button-primary">Run pipeline</button>
+    </div>
+    <ol class="pipeline-flow">
+      <li class="flow-step" id="flow1"><div class="flow-head"><span class="flow-number">1</span><b>Reader</b><span class="flow-state" id="flow1-state">waiting</span></div>
+        <p class="flow-io"><span>IN</span>resume file + your wishes</p><p class="flow-io"><span>OUT</span>skills, titles, experience</p></li>
+      <li class="flow-step" id="flow2"><div class="flow-head"><span class="flow-number">2</span><b>Hunter</b><span class="flow-state" id="flow2-state">waiting</span></div>
+        <p class="flow-io"><span>IN</span>profile from Reader</p><p class="flow-io"><span>OUT</span>LinkedIn + web jobs, scored</p></li>
+      <li class="flow-step" id="flow3"><div class="flow-head"><span class="flow-number">3</span><b>Tailor</b><span class="flow-state" id="flow3-state">waiting</span></div>
+        <p class="flow-io"><span>IN</span>the job you pick (pipeline: best match)</p><p class="flow-io"><span>OUT</span>new resume, old → new score</p></li>
+    </ol>
+    <p id="pipeline-message" class="helper"></p>
+  </article>
+
+  <div class="agent-grid">
+    <article class="card agent-card">
+      <h3>1 · Reader <span id="s1" class="stage-status"></span></h3>
+      <label class="file-drop" id="drop"><input type="file" id="file" accept=".pdf,.txt,.md"><span id="drop-text">Choose resume (PDF or .txt) or drop it here</span></label>
+      <label>Target role<input id="role" placeholder="e.g. Data Engineer"></label>
+      <label>Location<input id="location" placeholder="e.g. Bengaluru, Karnataka, India — or Remote"></label>
+      <label>Other wishes<textarea id="notes" rows="2" placeholder="e.g. hybrid, product companies"></textarea></label>
+      <div class="actions"><button id="b1" class="button button-secondary">Read resume</button></div>
+      <div class="progress"><div class="progress-top"><span id="l1">Ready.</span><b id="p1">0%</b></div><div class="track" id="t1"><i></i></div></div>
+      <div id="profile-out" class="chip-row" hidden></div>
+    </article>
+
+    <article class="card agent-card">
+      <h3>2 · Hunter <span id="s2" class="stage-status"></span></h3>
+      <p>Searches <strong>LinkedIn</strong> (the project's portal tool, every posting through the integrity check) and the <strong>wider web</strong> at the same time, then scores your resume against each job's screening keywords.</p>
+      <div class="actions"><button id="b2" class="button button-secondary" disabled>Find jobs</button></div>
+      <div class="progress"><div class="progress-top"><span id="l2">Waiting for Reader.</span><b id="p2">0%</b></div><div class="track" id="t2"><i></i></div></div>
+    </article>
+
+    <article class="card agent-card">
+      <h3>3 · Tailor <span id="s3" class="stage-status"></span></h3>
+      <p>Rewrites your resume for the job you pick, keeps every keyword you already had, and never hands back a resume that scores lower than your original.</p>
+      <p class="helper">Pick a job below, then choose <strong>Tailor resume</strong>.</p>
+      <div class="progress"><div class="progress-top"><span id="l3">Waiting for a job.</span><b id="p3">0%</b></div><div class="track" id="t3"><i></i></div></div>
+    </article>
+  </div>
+
+  <section id="jobs-stage" class="agent-stage" hidden>
+    <div class="section-heading">
+      <div><p class="eyebrow">HUNTER RESULTS</p><h2>Jobs matched to your resume</h2></div>
+      <span id="job-count" class="pill"></span>
+    </div>
+    <div class="stats">
+      <div class="card stat"><div class="n" id="st-count"></div><div class="helper">jobs found</div></div>
+      <div class="card stat"><div class="n" id="st-best"></div><div class="helper">best score</div></div>
+      <div class="card stat"><div class="n" id="st-avg"></div><div class="helper">average score</div></div>
+      <div class="card stat"><div class="n" id="st-flag"></div><div class="helper">postings flagged by the integrity check</div></div>
+    </div>
+    <p id="warnings" class="notice warn" hidden></p>
+    <div class="jobs-layout">
+      <div id="job-list" class="job-list"></div>
+      <article id="job-detail" class="card job-detail"><p class="muted">Select a job to see how it matches your resume.</p></article>
+    </div>
+  </section>
+
+  <section id="tailor-stage" class="agent-stage" hidden>
+    <div class="section-heading">
+      <div><p class="eyebrow">3 · TAILOR</p><h2 id="tailor-title">Resume for selected job</h2></div>
+      <a id="apply-link" class="button button-primary" target="_blank" rel="noopener noreferrer">Apply for this job ↗</a>
+    </div>
+    <p class="notice">Score = share of the employer's screening keywords found in the resume. It is not an ATS guarantee. Check every change before you send it.</p>
+    <div class="network-grid">
+      <article class="card">
+        <div class="score-pair">
+          <div><div class="helper">Old</div><div id="old-badge" class="score-badge"></div></div>
+          <span class="delta" id="delta"></span>
+          <div><div class="helper">New</div><div id="new-badge" class="score-badge"></div></div>
+        </div>
+        <div class="breakdown">
+          <div class="breakdown-row"><span>Old resume</span><div class="track"><i id="old-bar"></i></div><b id="old-n"></b></div>
+          <div class="breakdown-row"><span>New resume</span><div class="track done"><i id="new-bar"></i></div><b id="new-n"></b></div>
+        </div>
+        <p id="tailor-note" class="notice warn" hidden></p>
+        <h4 class="helper">Added keywords</h4><div id="kw-gained" class="chip-row"></div>
+        <h4 class="helper">Kept keywords</h4><div id="kw-kept" class="chip-row"></div>
+        <h4 class="helper">Still missing: genuine gaps, not invented</h4><div id="kw-missing" class="chip-row"></div>
+        <p id="repaired" class="helper" style="margin-top:10px"></p>
+        <h4 class="helper">What changed</h4><ul id="changes" class="changes"></ul>
+      </article>
+      <article class="card">
+        <label>Tailored resume (you can edit it here)<textarea id="resume" rows="22"></textarea></label>
+        <div class="job-actions">
+          <button id="download" class="button button-secondary">Download .md</button>
+          <button id="copy" class="button button-secondary">Copy text</button>
+        </div>
+      </article>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let profile = null, jobs = [], selected = null;
+
+/* Data comes from resumes and web pages: build the DOM with textContent, never innerHTML. */
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+const safeUrl = u => /^https?:\/\//i.test(u || "") ? u : null;  // blocks javascript: links from scraped data
+const band = s => s >= 60 ? "score-high" : s >= 30 ? "score-mid" : "score-low";
+const ringColor = s => s >= 60 ? "#16a34a" : s >= 30 ? "#d97706" : "#dc2626";
+const prefs = () => ({ role: $("role").value.trim(), location: $("location").value.trim(), notes: $("notes").value.trim() });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---- Agent state: card status, progress bar, flow step ---- */
+function setAgent(n, state, pct, label) {
+  const names = { running: "running", complete: "complete", failed: "failed", ready: "" };
+  $("s" + n).className = "stage-status " + state; $("s" + n).textContent = names[state] ?? "";
+  $("t" + n).className = "track " + (state === "complete" ? "done" : state);
+  if (pct != null) { $("t" + n).firstElementChild.style.width = pct + "%"; $("p" + n).textContent = pct + "%"; }
+  if (label != null) { $("l" + n).textContent = label; $("l" + n).className = state === "failed" ? "error-text" : ""; }
+  $("flow" + n).className = "flow-step" + ({ running: " active", complete: " done", failed: " failed" }[state] || "");
+  $("flow" + n + "-state").textContent = { running: pct + "%", complete: "done", failed: "failed" }[state] || "waiting";
+  const busy = [1, 2, 3].some(i => $("s" + i).classList.contains("running"));
+  $("run-status").className = "pill " + (busy ? "busy" : state === "failed" ? "bad" : "good");
+  $("run-status").textContent = busy ? "Agent running…" : state === "failed" ? "Stopped on an error" : "Ready";
+}
+
+async function runAgent(n, path, body) {
+  setAgent(n, "running", 0, "Starting");
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const start = await r.json().catch(() => ({}));
+  if (!r.ok) { setAgent(n, "failed", 0, start.error || r.statusText); throw new Error(start.error || r.statusText); }
+  for (;;) {
+    await sleep(1000);
+    const t = await (await fetch("/api/task/" + start.task)).json();
+    if (t.done && t.error) { setAgent(n, "failed", t.pct, t.error); throw new Error(t.error); }
+    if (t.done) { setAgent(n, "complete", 100, "Done"); return t.result; }
+    setAgent(n, "running", t.pct, t.label);
+  }
+}
+
+/* ---- Agent 1 ---- */
+const drop = $("drop");
+const showFile = () => { const f = $("file").files[0]; if (f) $("drop-text").textContent = "📄 " + f.name; };
+$("file").onchange = showFile;
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); $("file").files = e.dataTransfer.files; showFile(); };
+
+async function agent1() {
+  const f = $("file").files[0];
+  if (!f) { setAgent(1, "failed", 0, "Choose a resume file first."); throw new Error("no file"); }
+  if (f.size > 10 * 1024 * 1024) { setAgent(1, "failed", 0, "File too large (10 MB max)."); throw new Error("too big"); }
+  const b64 = await new Promise((ok, fail) => { const rd = new FileReader(); rd.onload = () => ok(rd.result.split(",")[1]); rd.onerror = fail; rd.readAsDataURL(f); });
+  profile = await runAgent(1, "/api/profile", { filename: f.name, file_b64: b64 });
+  $("l1").textContent = `${profile.name} · ${profile.headline} · ${profile.years_experience} yrs · ${profile.skills.length} skills`;
+  $("profile-out").replaceChildren(...profile.skills.map(s => el("span", "skill-chip", s))); $("profile-out").hidden = false;
+  if (!$("role").value && profile.job_titles[0]) $("role").value = profile.job_titles[0];
+  $("b2").disabled = false; $("l2").textContent = "Ready.";
+}
+
+/* ---- Agent 2 ---- */
+function guardBadge(job) {
+  const g = job.guard || "";
+  if (g.startsWith("not checked")) return el("span", "portal-badge guard-na", "not checked");
+  if (g.includes("clean")) return el("span", "portal-badge guard-ok", "✓ integrity clean");
+  const b = el("span", "portal-badge guard-warn", "⚠ flagged"); b.title = g; return b;
+}
+
+function jobCard(job, i) {
+  const card = el("button", "job-card"); card.type = "button";
+  const badge = el("div", "score-badge " + band(job.score), job.score);
+  const body = el("div", "job-card-body");
+  const meta = el("div", "job-card-meta");
+  meta.append(el("span", "portal-badge " + (job.source === "LinkedIn" ? "portal-linkedin" : "portal-web"), job.source), guardBadge(job));
+  body.append(el("span", "job-card-title", job.title), el("span", "job-card-company", `${job.company} · ${job.location}`), meta);
+  card.append(badge, body);
+  card.onclick = () => showJob(i);
+  return card;
+}
+
+function showJob(i) {
+  selected = jobs[i];
+  [...$("job-list").children].forEach((c, k) => c.classList.toggle("selected", k === i));
+  const j = selected, d = $("job-detail");
+  const ring = el("div", "score-ring");
+  ring.style.background = `radial-gradient(closest-side, #fff 78%, transparent 80%), conic-gradient(${ringColor(j.score)} ${j.score * 3.6}deg, #eef2f7 0)`;
+  ring.append(el("strong", null, j.score), el("span", null, "match"));
+  const head = el("div", "detail-head"), left = el("div");
+  const meta = el("div", "job-card-meta");
+  meta.append(el("span", "portal-badge " + (j.source === "LinkedIn" ? "portal-linkedin" : "portal-web"), j.source), guardBadge(j));
+  left.append(meta, el("h3", null, j.title), el("p", "muted", `${j.company} · ${j.location}`));
+  head.append(left, ring);
+  const actions = el("div", "job-actions");
+  const tb = el("button", "button button-primary", "Tailor resume"); tb.onclick = async () => { tb.disabled = true; try { await agent3(j); } catch (e) {} finally { tb.disabled = false; } };
+  actions.append(tb);
+  const url = safeUrl(j.apply_url);
+  if (url) { const a = el("a", "button button-secondary", "View & apply ↗"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; actions.append(a); }
+  const hit = el("div", "chip-row"); j.matched.forEach(k => hit.append(el("span", "skill-chip matched", "✓ " + k)));
+  const miss = el("div", "chip-row"); j.missing.forEach(k => miss.append(el("span", "skill-chip missing", k)));
+  d.replaceChildren(head, actions, el("h4", null, "About the job"), el("p", null, j.summary),
+    el("h4", null, `Keywords already in your resume (${j.matched.length})`), hit,
+    el("h4", null, `Missing keywords (${j.missing.length})`), miss,
+    el("p", "helper", j.source === "LinkedIn" ? "Integrity check: " + j.guard : "Found by Claude's web search; not run through the integrity check."));
+}
+
+async function agent2() {
+  const r = await runAgent(2, "/api/jobs", { profile, prefs: prefs() });
+  jobs = r.jobs;
+  $("job-list").replaceChildren(...jobs.map(jobCard));
+  const s = jobs.map(j => j.score);
+  $("st-count").textContent = jobs.length;
+  $("st-best").textContent = jobs.length ? Math.max(...s) + "%" : "–";
+  $("st-avg").textContent = jobs.length ? Math.round(s.reduce((a, b) => a + b, 0) / jobs.length) + "%" : "–";
+  $("st-flag").textContent = jobs.filter(j => !(j.guard || "").includes("clean") && !(j.guard || "").startsWith("not checked")).length;
+  $("job-count").textContent = `${jobs.length} jobs · best match first`;
+  $("warnings").hidden = !r.warnings.length; $("warnings").textContent = "Some sources failed: " + r.warnings.join(" · ");
+  $("l2").textContent = `${jobs.length} jobs found (${jobs.filter(j => j.source === "LinkedIn").length} LinkedIn, ${jobs.filter(j => j.source !== "LinkedIn").length} web)`;
+  $("jobs-stage").hidden = false;
+  if (jobs.length) showJob(0);
+  $("l3").textContent = "Ready: pick a job.";
+}
+
+/* ---- Agent 3 ---- */
+async function agent3(job) {
+  $("tailor-stage").hidden = true;
+  const t = await runAgent(3, "/api/tailor", { profile, job });
+  const b = t.before.score, a = t.after.score, diff = a - b;
+  $("tailor-title").textContent = `Resume for ${job.title} — ${job.company}`;
+  $("old-badge").className = "score-badge " + band(b); $("old-badge").textContent = b;
+  $("new-badge").className = "score-badge " + band(a); $("new-badge").textContent = a;
+  $("delta").className = "delta " + (diff > 0 ? "up" : diff < 0 ? "down" : "same");
+  $("delta").textContent = diff > 0 ? `▲ +${diff}` : diff < 0 ? `▼ ${diff}` : "= no change";
+  $("old-bar").style.width = b + "%"; $("old-n").textContent = b + "%";
+  $("new-bar").style.width = a + "%"; $("new-n").textContent = a + "%";
+  $("tailor-note").hidden = !t.note; $("tailor-note").textContent = t.note;
+  const chips = (id, list, cls, empty) => $(id).replaceChildren(...(list.length ? list.map(k => el("span", "skill-chip " + cls, k)) : [el("span", "helper", empty)]));
+  chips("kw-gained", t.gained, "gained", "none added");
+  chips("kw-kept", t.before.matched.filter(k => !t.lost.includes(k)), "matched", "none");
+  chips("kw-missing", t.after.missing, "missing", "none: every keyword is covered");
+  $("repaired").textContent = t.repaired.length ? `The first rewrite dropped ${t.repaired.join(", ")}; the Tailor restored ${t.repaired.length === 1 ? "it" : "them"} before showing you this.` : "";
+  $("changes").replaceChildren(...(t.changes.length ? t.changes.map(c => el("li", null, c)) : [el("li", "helper", "No changes.")]));
+  $("resume").value = t.resume_markdown;
+  const url = safeUrl(t.apply_url); $("apply-link").hidden = !url; if (url) $("apply-link").href = url;
+  $("l3").textContent = `Score ${b} → ${a}`;
+  $("tailor-stage").hidden = false; $("tailor-stage").scrollIntoView({ behavior: "smooth" });
+}
+
+/* ---- Buttons ---- */
+const lock = on => ["b1", "b2", "run-all"].forEach(id => { if (id !== "b2" || profile) $(id).disabled = on; });
+const guarded = fn => async () => { lock(true); try { await fn(); } catch (e) { /* shown on the agent card */ } finally { lock(false); } };
+$("b1").onclick = guarded(agent1);
+$("b2").onclick = guarded(agent2);
+$("run-all").onclick = guarded(async () => {
+  $("pipeline-message").textContent = "Running Reader → Hunter → Tailor (best match). This takes about 4–5 minutes.";
+  await agent1(); await agent2();
+  if (!jobs.length) { $("pipeline-message").textContent = "Hunter found no jobs, so the pipeline stopped. Try a broader role or location."; return; }
+  await agent3(jobs[0]);
+  $("pipeline-message").textContent = "Pipeline finished. Pick any other job to tailor for it too.";
+});
+$("download").onclick = () => {
+  const url = URL.createObjectURL(new Blob([$("resume").value], { type: "text/markdown" }));
+  Object.assign(document.createElement("a"), { href: url, download: "resume_tailored.md" }).click(); URL.revokeObjectURL(url);
+};
+$("copy").onclick = async () => { await navigator.clipboard.writeText($("resume").value); $("copy").textContent = "Copied ✓"; setTimeout(() => $("copy").textContent = "Copy text", 1500); };
+</script>
+</body>
+</html>
